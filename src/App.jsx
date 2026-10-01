@@ -1,0 +1,856 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker } from 'react-simple-maps';
+import { geoCentroid, geoMercator } from 'd3-geo';
+import confetti from 'canvas-confetti';
+import { WILAYA_DATA } from './data';
+import { playCorrectSound, playIncorrectSound } from './audio';
+import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { db } from './firebase';
+import { TRANSLATIONS } from './translations';
+import './index.css';
+
+const geoUrl = "/algeria.json";
+const WILAYA_NAMES = Object.keys(WILAYA_DATA);
+
+const REGION_VIEWS = {
+  "West": { center: [0, 34], zoom: 2 },
+  "East": { center: [7, 34], zoom: 2 },
+  "North": { center: [3, 36], zoom: 3 },
+  "South": { center: [3, 26], zoom: 1.5 },
+  "Central": { center: [3, 32], zoom: 2 }
+};
+const DEFAULT_VIEW = { center: [2.5, 28], zoom: 1.2 };
+
+const GAME_MODES = {
+  CLASSIC: { id: 'CLASSIC', title: 'Classic', desc: 'Find the wilaya on the map.' },
+  TIME_ATTACK: { id: 'TIME_ATTACK', title: 'Time Attack', desc: '60 seconds. Go fast!' },
+  REVERSE: { id: 'REVERSE', title: 'Reverse', desc: 'Map highlights a wilaya. Pick its name.' },
+  CAPITALS: { id: 'CAPITALS', title: 'Capitals', desc: 'Find the wilaya by its Capital.' },
+  TRIVIA: { id: 'TRIVIA', title: 'Trivia', desc: 'Wilaya is highlighted. Answer a fact!' },
+  STUDY: { id: 'STUDY', title: 'Study Guide', desc: 'Relax, click around, and learn! 📚' },
+  REGIONS: { id: 'REGIONS', title: 'Region Explorer', desc: 'Click to learn about Algeria regions! 🧭' }
+};
+
+const BADGES = [
+  { id: 'classic', icon: '🗺️', label: 'Classic Explorer (Score 200+)' },
+  { id: 'speedster', icon: '⏱️', label: 'Speedster (Time Attack 200+)' },
+  { id: 'geographer', icon: '📍', label: 'Geographer (Reverse 200+)' },
+  { id: 'president', icon: '🏛️', label: 'President (Capitals 200+)' },
+  { id: 'brainiac', icon: '🧠', label: 'Brainiac (Trivia 200+)' }
+];
+
+function App() {
+  const [playerName, setPlayerName] = useState("");
+  const [gameStarted, setGameStarted] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [mode, setMode] = useState(GAME_MODES.CLASSIC.id);
+  const [lang, setLang] = useState('en');
+  const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
+  
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [timeLeft, setTimeLeft] = useState(60);
+  
+  const [targetWilaya, setTargetWilaya] = useState("");
+  const [options, setOptions] = useState([]);
+  const [triviaQuestion, setTriviaQuestion] = useState("");
+  
+  const [guessedWilayas, setGuessedWilayas] = useState({});
+  const [gameOver, setGameOver] = useState(false);
+  
+  const [currentFact, setCurrentFact] = useState(null);
+  
+  const [floatingTexts, setFloatingTexts] = useState([]); // Array of floating text objects
+
+  const [unlockedBadges, setUnlockedBadges] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [studyData, setStudyData] = useState(null); // Advanced Study Guide Data
+  const [mapView, setMapView] = useState(DEFAULT_VIEW);
+
+  const timerRef = useRef(null);
+  const audioRef = useRef(null);
+  const anthemRef = useRef(null);
+
+  const fetchLeaderboard = async () => {
+    try {
+      const q = query(collection(db, "algeria-map-leaderboard"), orderBy("score", "desc"), limit(5));
+      const querySnapshot = await getDocs(q);
+      const scores = [];
+      querySnapshot.forEach((doc) => {
+        scores.push({ id: doc.id, ...doc.data() });
+      });
+      setLeaderboard(scores);
+    } catch (e) {
+      console.log("Firebase not configured yet");
+    }
+  };
+
+  useEffect(() => {
+    // If the event fired before React loaded, it's saved here
+    if (window.globalInstallPrompt) {
+      setInstallPrompt(window.globalInstallPrompt);
+    }
+
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      window.globalInstallPrompt = e;
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    const savedHighScore = localStorage.getItem("algeriaMapHighScore");
+    if (savedHighScore) setHighScore(parseInt(savedHighScore, 10));
+    
+    const savedBadges = JSON.parse(localStorage.getItem("algeriaMapBadges") || "[]");
+    setUnlockedBadges(savedBadges);
+
+    fetchLeaderboard();
+
+    const bgMusic = document.getElementById('bg-music');
+    const anthemMusic = document.getElementById('anthem-audio');
+
+    if (bgMusic) bgMusic.volume = 0.05;
+    if (anthemMusic) {
+      anthemMusic.volume = 0.08;
+      anthemMusic.onended = () => {
+        if (musicPlaying && bgMusic) {
+          bgMusic.play().catch(e => console.log(e));
+        }
+      };
+    }
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, [musicPlaying]);
+
+  useEffect(() => {
+    if (score > highScore) {
+      setHighScore(score);
+      localStorage.setItem("algeriaMapHighScore", score);
+    }
+    checkBadges(score, mode);
+  }, [score, highScore, mode]);
+
+  useEffect(() => {
+    if (gameStarted && !gameOver && !currentFact && mode === 'TIME_ATTACK') {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            triggerGameOver(0);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [gameStarted, gameOver, currentFact, mode]);
+
+  const checkBadges = (currentScore, currentMode) => {
+    if (currentScore >= 200) {
+      let badgeId = '';
+      if (currentMode === 'CLASSIC') badgeId = 'classic';
+      if (currentMode === 'TIME_ATTACK') badgeId = 'speedster';
+      if (currentMode === 'REVERSE') badgeId = 'geographer';
+      if (currentMode === 'CAPITALS') badgeId = 'president';
+      if (currentMode === 'TRIVIA') badgeId = 'brainiac';
+      
+      if (badgeId && !unlockedBadges.includes(badgeId)) {
+        const newBadges = [...unlockedBadges, badgeId];
+        setUnlockedBadges(newBadges);
+        localStorage.setItem("algeriaMapBadges", JSON.stringify(newBadges));
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.3 }, colors: ['#facc15'] });
+      }
+    }
+  };
+
+  const toggleMusic = () => {
+    const bgMusic = document.getElementById('bg-music');
+    const anthemMusic = document.getElementById('anthem-audio');
+    
+    if (musicPlaying) {
+      if (bgMusic) bgMusic.pause();
+      if (anthemMusic) anthemMusic.pause();
+    } else {
+      if (anthemMusic && anthemMusic.currentTime > 0 && !anthemMusic.ended) {
+        anthemMusic.play().catch(e => console.log(e));
+      } else if (bgMusic) {
+        bgMusic.play().catch(e => console.log(e));
+      }
+    }
+    setMusicPlaying(!musicPlaying);
+  };
+
+  const startGame = () => {
+    const finalName = playerName.trim() || "Explorer";
+    setPlayerName(finalName);
+    setGameStarted(true);
+    setScore(0);
+    setStreak(0);
+    setLives(3);
+    setTimeLeft(60);
+    setGuessedWilayas({});
+    setGameOver(false);
+    setStudyData(null);
+    setMapView(DEFAULT_VIEW);
+    pickNewTarget({});
+    
+    // Play Yankee Doodle via audio element
+    const bgMusic = document.getElementById('bg-music');
+    if (bgMusic) {
+      bgMusic.currentTime = 0;
+      bgMusic.play().then(() => setMusicPlaying(true)).catch(e => console.log("Audio block:", e));
+    }
+  };
+
+  const saveToLeaderboard = async (finalScore) => {
+    if (finalScore > 0 && playerName) {
+      try {
+        await addDoc(collection(db, "algeria-map-leaderboard"), {
+          name: playerName,
+          score: finalScore,
+          mode: mode,
+          date: new Date().toISOString()
+        });
+        fetchLeaderboard();
+      } catch (e) {
+        console.log("Firebase error:", e);
+      }
+    }
+  };
+
+  const triggerGameOver = (finalScore) => {
+    setGameOver(true);
+    saveToLeaderboard(finalScore);
+  };
+
+  const generateMultipleChoice = (correctAnswer, type) => {
+    const opts = new Set([correctAnswer]);
+    while(opts.size < 4) {
+      const randState = WILAYA_NAMES[Math.floor(Math.random() * WILAYA_NAMES.length)];
+      if (type === 'name') opts.add(randState);
+      else if (type === 'population') opts.add(WILAYA_DATA[randState].population);
+      else if (type === 'area') opts.add(WILAYA_DATA[randState].area);
+      else if (type === 'capital') opts.add(WILAYA_DATA[randState].capital);
+    }
+    return Array.from(opts).sort(() => Math.random() - 0.5);
+  };
+
+  const pickNewTarget = (currentGuessed) => {
+    if (mode === 'STUDY') {
+      setTargetWilaya("Click any wilaya to learn! 📚");
+      return;
+    }
+
+    if (mode === 'REGIONS') {
+      setTargetWilaya("Click a wilaya to explore its Region! 🧭");
+      return;
+    }
+
+    const remaining = WILAYA_NAMES.filter(s => currentGuessed[s] !== "correct");
+    if (remaining.length === 0) {
+      setTargetWilaya("You Win!");
+      
+      const anthemMusic = document.getElementById('anthem-audio');
+      const bgMusic = document.getElementById('bg-music');
+      if (bgMusic) bgMusic.pause();
+      if (anthemMusic) {
+        anthemMusic.currentTime = 0;
+        anthemMusic.play().catch(e => console.log(e));
+      }
+      
+      const duration = 50 * 1000;
+      const animationEnd = Date.now() + duration;
+      const interval = setInterval(function() {
+        var timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+        var particleCount = 50 * (timeLeft / duration);
+        confetti({ startVelocity: 30, spread: 360, ticks: 60, zIndex: 0, particleCount, origin: { x: Math.random(), y: Math.random() - 0.2 } });
+      }, 250);
+
+      setTimeout(() => {
+        triggerGameOver(score);
+      }, 50000);
+      return;
+    }
+    const randomState = remaining[Math.floor(Math.random() * remaining.length)];
+    setTargetWilaya(randomState);
+
+    if (mode === 'REVERSE') {
+      setOptions(generateMultipleChoice(randomState, 'name'));
+    } else if (mode === 'TRIVIA') {
+      const types = ['capital', 'region'];
+      const questionType = types[Math.floor(Math.random() * types.length)];
+      setTriviaQuestion(questionType);
+      setOptions(generateMultipleChoice(WILAYA_DATA[randomState][questionType], questionType));
+    }
+  };
+
+  const handleGuess = (guess) => {
+    if (gameOver || currentFact || !gameStarted) return;
+    
+    let isCorrect = false;
+    
+    if (mode === 'REVERSE' || mode === 'TRIVIA') {
+      const isCorrect = (guess === targetWilaya);
+      processAnswer(isCorrect, targetWilaya, null);
+    } else {
+      processAnswer(guess === targetWilaya, targetWilaya, null);
+    }
+  };
+
+  const handleMapClick = (geo, evt) => {
+    if (gameOver || currentFact || !gameStarted) return;
+    const stateName = geo.properties.name;
+
+    if (mode === 'STUDY') {
+      if (WILAYA_NAMES.includes(stateName)) {
+        setCurrentFact({
+          state: stateName,
+          text: WILAYA_DATA[stateName].fact,
+          pointsEarned: 0
+        });
+      }
+      return;
+    }
+
+    if (mode === 'REVERSE' || mode === 'TRIVIA') return; // In these modes, use buttons
+    
+    if (guessedWilayas[stateName] === "correct" || !WILAYA_NAMES.includes(stateName)) return;
+
+    // Pass the click coordinates for the floating combo text
+    handleGuess(stateName, evt);
+  };
+
+  const handleGuessMap = (guess, evt) => {
+    if (gameOver || currentFact || !gameStarted) return;
+    processAnswer(guess === targetWilaya, guess, evt);
+  };
+
+  const handleMapClickFinal = (geo, evt) => {
+    if (gameOver || currentFact || !gameStarted) return;
+    const stateName = geo.properties.name;
+
+    if (mode === 'STUDY') {
+      if (WILAYA_NAMES.includes(stateName)) {
+        setTargetWilaya(stateName);
+        
+        setStudyData({
+           stateName,
+           extract: WILAYA_DATA[stateName].fact,
+           thumbnail: null,
+           url: `https://en.wikipedia.org/wiki/${stateName.replace(/ /g, '_')}_Province`
+        });
+      }
+      return;
+    }
+
+    if (mode === 'REGIONS') {
+      if (WILAYA_NAMES.includes(stateName)) {
+        const region = WILAYA_DATA[stateName].region;
+        // Highlight all states in this region
+        const newGuessed = {};
+        const regionStates = [];
+        Object.entries(WILAYA_DATA).forEach(([name, data]) => {
+          if (data.region === region) {
+            newGuessed[name] = 'correct';
+            regionStates.push(name);
+          }
+        });
+        setGuessedWilayas(newGuessed);
+        if (REGION_VIEWS[region]) {
+          setMapView(REGION_VIEWS[region]);
+        }
+        
+        setStudyData({
+          stateName: `${region} Region`,
+          extract: `Wilayas in this region: ${regionStates.join(', ')}`,
+          thumbnail: null,
+          url: `https://en.wikipedia.org/wiki/Geography_of_Algeria`
+        });
+      }
+      return;
+    }
+
+    if (mode === 'REVERSE' || mode === 'TRIVIA') return;
+    
+    if (guessedWilayas[stateName] === "correct" || !WILAYA_NAMES.includes(stateName)) return;
+
+    handleGuessMap(stateName, evt);
+  };
+
+  const processAnswer = (isCorrect, stateName, evt) => {
+    if (isCorrect) {
+      playCorrectSound();
+      const newGuessed = { ...guessedWilayas, [stateName]: "correct" };
+      setGuessedWilayas(newGuessed);
+      
+      const newStreak = streak + 1;
+      setStreak(newStreak);
+      
+      const points = 10 * newStreak;
+      const newScore = score + points;
+      setScore(newScore);
+      if (mode === 'TIME_ATTACK') setTimeLeft(prev => prev + 2);
+      
+      // Floating Combo Text
+      if (evt && evt.clientX) {
+        const id = Date.now();
+        const x = evt.clientX;
+        const y = evt.clientY - 20;
+        setFloatingTexts(prev => [...prev, { id, text: `+${points}`, combo: newStreak >= 3 ? newStreak : null, x, y }]);
+        setTimeout(() => setFloatingTexts(prev => prev.filter(f => f.id !== id)), 1500);
+      }
+      
+      confetti({
+        particleCount: 50 + (newStreak * 10),
+        spread: 60,
+        origin: { y: 0.8 },
+        colors: ['#22c55e', '#ffffff', '#3b82f6', '#facc15']
+      });
+
+      setCurrentFact({
+        state: stateName,
+        text: WILAYA_DATA[stateName].fact,
+        pointsEarned: points
+      });
+
+    } else {
+      playIncorrectSound();
+      setStreak(0);
+      setGuessedWilayas(prev => ({ ...prev, [stateName]: "incorrect" }));
+      
+      if (mode === 'TIME_ATTACK') {
+        setTimeLeft(prev => Math.max(0, prev - 5));
+      } else {
+        setLives(prev => {
+          const newLives = prev - 1;
+          if (newLives <= 0) triggerGameOver(score);
+          return newLives;
+        });
+      }
+
+      setTimeout(() => {
+        setGuessedWilayas(prev => {
+          const updated = { ...prev };
+          if (updated[stateName] === "incorrect") delete updated[stateName];
+          return updated;
+        });
+      }, 800);
+    }
+  };
+
+  const closeFactAndNext = () => {
+    setCurrentFact(null);
+    pickNewTarget(guessedWilayas);
+  };
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) {
+      setShowInstallGuide(true);
+      return;
+    }
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
+
+  const getWilayaDisplayName = (wilayaName) => {
+    if (!wilayaName || !WILAYA_DATA[wilayaName]) return wilayaName;
+    return lang === 'ar' && WILAYA_DATA[wilayaName].name_ar 
+      ? WILAYA_DATA[wilayaName].name_ar 
+      : wilayaName;
+  };
+
+  return (
+    <div className="game-wrapper" style={{ width: '100vw', height: '100vh' }}>
+      {/* Hidden Audio Elements for better browser support - ALWAYS MOUNTED */}
+      <audio id="anthem-audio" src="/anthem.mp3" preload="auto"></audio>
+      <audio id="bg-music" src="/music.mp3" loop preload="auto"></audio>
+
+      {!gameStarted ? (
+        <div className="game-container" style={{ justifyContent: 'center' }}>
+          <button className="icon-btn about-btn" onClick={() => setShowAbout(true)} title="About Algeria Wilaya Explorer" style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 100 }}>
+            ℹ️
+          </button>
+          <button className="icon-btn music-toggle" onClick={toggleMusic} title="Toggle Music">
+            {musicPlaying ? "🔊" : "🔇"}
+          </button>
+          <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '5px', zIndex: 100 }}>
+            <button className={`lang-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>EN</button>
+            <button className={`lang-btn ${lang === 'fr' ? 'active' : ''}`} onClick={() => setLang('fr')}>FR</button>
+            <button className={`lang-btn ${lang === 'ar' ? 'active' : ''}`} onClick={() => setLang('ar')}>AR</button>
+          </div>
+
+          {showAbout && (
+            <div className="overlay" style={{ zIndex: 2000 }}>
+              <div className="glass-panel modal" style={{ maxWidth: '500px' }}>
+                <h2 className="title" style={{ fontSize: '2rem', marginBottom: '1rem' }}>About</h2>
+                <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '1.1rem', lineHeight: '1.5' }}>
+                  <div><strong>Author:</strong> Massinissa TINOUCHE</div>
+                  <div><strong>Address:</strong> Algeria</div>
+                  <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: '4px solid var(--accent-blue)' }}>
+                    <strong>Algeria Wilaya Explorer</strong> is an interactive educational PWA designed to help students learn about the 58 Algerian wilayas, their capitals, and geographic regions. Play offline, earn badges, and compete on the global leaderboard!
+                  </div>
+                </div>
+                <button className="btn-primary" onClick={() => setShowAbout(false)} style={{ marginTop: '2rem' }}>
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showInstallGuide && (
+            <div className="overlay" style={{ zIndex: 2000 }}>
+              <div className="glass-panel modal" style={{ maxWidth: '400px', textAlign: 'left' }}>
+                <h2 className="title" style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>How to Install</h2>
+                <p style={{ marginBottom: '1rem', lineHeight: '1.5' }}>
+                  Your browser doesn't support automatic installation. To install this app:
+                </p>
+                <ul style={{ marginBottom: '1.5rem', paddingLeft: '1.5rem', lineHeight: '1.5' }}>
+                  <li><strong>iPhone / iPad (Safari):</strong> Tap the <strong>Share</strong> button at the bottom of the screen, then tap <strong>Add to Home Screen</strong>.</li>
+                  <li><strong>Android (Firefox):</strong> Tap the three dots menu, then tap <strong>Install</strong>.</li>
+                  <li><strong>Desktop:</strong> Look for the install icon 💻 in your URL bar!</li>
+                </ul>
+                <button className="btn-primary" onClick={() => setShowInstallGuide(false)}>Got it!</button>
+              </div>
+            </div>
+          )}
+
+        <div className="glass-panel modal">
+          <div className="mascot"><img src="/pwa-192x192.png" alt="Icon" width="48" height="48" style={{ borderRadius: '50%' }} /></div>
+          <h1 className="title">{t.title}</h1>
+          
+          <input 
+            type="text" 
+            className="player-input" 
+            placeholder="Enter your name..." 
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+          />
+
+          <h3 style={{ marginTop: '0.5rem' }}>{t.selectGameMode}</h3>
+          <div className="mode-grid">
+            {Object.values(GAME_MODES).map(m => (
+              <div 
+                key={m.id} 
+                className={`mode-card ${mode === m.id ? 'active' : ''}`}
+                onClick={() => setMode(m.id)}
+              >
+                <div className="mode-title">{t.modes[m.id]}</div>
+                <div className="mode-desc">{t.modeDescriptions[m.id]}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="btn-primary" onClick={startGame}>
+              {t.letsPlay}
+            </button>
+            
+            <button className="btn-primary" style={{ background: '#10b981' }} onClick={handleInstallClick}>
+              {t.installApp}
+            </button>
+          </div>
+
+          <div className="badges-container">
+            {BADGES.map(b => (
+              <div key={b.id} className={`badge ${unlockedBadges.includes(b.id) ? 'unlocked' : ''}`} title={b.label}>
+                {b.icon}
+              </div>
+            ))}
+          </div>
+
+          {leaderboard.length > 0 && (
+            <div style={{ marginTop: '1rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', width: '100%' }}>
+              <h3 style={{ color: '#facc15', marginBottom: '0.5rem' }}>{t.globalLeaderboard}</h3>
+              {leaderboard.map((entry, i) => (
+                <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '0.2rem 0' }}>
+                  <span>{i + 1}. {entry.name} <span style={{opacity:0.5}}>({entry.mode})</span></span>
+                  <span style={{ fontWeight: 'bold' }}>{entry.score} {t.pts}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      ) : (
+      <div className={`game-container ${lang === 'ar' ? 'rtl-layout' : ''}`}>
+        <button className="icon-btn home-btn" onClick={() => setGameStarted(false)} title="Back to Menu">
+          🏠
+        </button>
+        <button className="icon-btn music-toggle" onClick={toggleMusic} title="Toggle Music">
+          {musicPlaying ? "🔊" : "🔇"}
+        </button>
+        <div style={{ position: 'absolute', top: '20px', right: '70px', display: 'flex', gap: '5px', zIndex: 100 }}>
+            <button className={`lang-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>EN</button>
+            <button className={`lang-btn ${lang === 'fr' ? 'active' : ''}`} onClick={() => setLang('fr')}>FR</button>
+            <button className={`lang-btn ${lang === 'ar' ? 'active' : ''}`} onClick={() => setLang('ar')}>AR</button>
+        </div>
+      <div className="header">
+        <div className="title-container">
+          <span className="mascot"><img src="/pwa-192x192.png" alt="Icon" width="40" height="40" style={{ borderRadius: '50%' }} /></span>
+          <h1 className="title" style={{ fontSize: '2.5rem' }}>
+            {playerName === 'Explorer' ? t.explorersChallenge : `${playerName}'s Challenge!`}
+          </h1>
+        </div>
+        
+        <div className="glass-panel" style={{ padding: '0.5rem', gap: '1rem' }}>
+          <div className="stat-box">
+            <span className="stat-label">{t.score}</span>
+            <span className="stat-value">⭐ {score}</span>
+          </div>
+          <div className="stat-box">
+            <span className="stat-label">{t.streak}</span>
+            <span className={`stat-value ${streak >= 3 ? 'streak-text' : ''}`}>🔥 x{streak}</span>
+          </div>
+          <div className="stat-box">
+            <span className="stat-label">{mode === 'TIME_ATTACK' ? 'Time' : t.lives}</span>
+            <span className={`stat-value ${mode === 'TIME_ATTACK' && timeLeft <= 10 ? 'streak-text' : ''}`} style={mode==='TIME_ATTACK' && timeLeft<=10 ? {color:'#ef4444'}:{}}>
+              {mode === 'TIME_ATTACK' ? `${timeLeft}s ⏳` : "❤️".repeat(Math.max(0, lives))}
+            </span>
+          </div>
+        </div>
+
+        {!gameOver && !currentFact && (
+          <div className="target-state-display">
+            <span className="target-label">
+              {mode === 'CAPITALS' ? t.prompts.capitals : 
+               mode === 'REVERSE' ? t.prompts.reverse :
+               mode === 'TRIVIA' ? (triviaQuestion === 'capital' ? t.prompts.triviaCapital : t.prompts.triviaRegion) :
+               mode === 'STUDY' ? t.prompts.study :
+               t.prompts.default}
+            </span>
+            <div className="target-name" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              {/* No flags for wilayas */}
+              <span className={targetWilaya === "Game Over" ? "game-over-text" : targetWilaya === "You Win!" ? "win-text" : "target-wilaya"}>
+                {mode === 'CAPITALS' ? (lang === 'ar' ? WILAYA_DATA[targetWilaya]?.name_ar : WILAYA_DATA[targetWilaya]?.capital) : 
+                 mode === 'REVERSE' || mode === 'TRIVIA' ? "???" : 
+                 targetWilaya === "Game Over" || targetWilaya === "You Win!" ? targetWilaya : getWilayaDisplayName(targetWilaya)}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="map-container">
+        <ComposableMap projection={geoMercator().scale(1200).center([2.5, 28]).translate([400, 300])} className="main-map-svg" width={800} height={600}>
+          <defs>
+            <pattern id="algeria-flag" patternUnits="userSpaceOnUse" width="800" height="600">
+              <image href="https://upload.wikimedia.org/wikipedia/commons/7/77/Flag_of_Algeria.svg" width="800" height="600" preserveAspectRatio="xMidYMid slice" />
+            </pattern>
+          </defs>
+          <ZoomableGroup className="rsm-zoomable-group" zoom={mapView.zoom} center={mapView.center}>
+            <Geographies geography={geoUrl}>
+              {({ geographies }) => (
+                <>
+                  {geographies.map((geo) => {
+                    const stateName = geo.properties.name;
+                    const status = guessedWilayas[stateName];
+                    let className = "state-path";
+                    
+                    if (status === "correct" && mode !== 'REGIONS') className += " correct";
+                    if (status === "incorrect") className += " incorrect";
+                    
+                    if (mode === 'REGIONS' && WILAYA_DATA[stateName]) {
+                      const region = WILAYA_DATA[stateName].region;
+                      if (region === 'West') className += " region-west";
+                      if (region === 'East') className += " region-east";
+                      if (region === 'North') className += " region-north";
+                      if (region === 'South') className += " region-south";
+                      if (region === 'Central') className += " region-central";
+                      
+                      // Highlight effect when a region is actively selected
+                      const isAnySelected = Object.keys(guessedWilayas).length > 0;
+                      if (status === "correct") {
+                        className += " active-region";
+                      } else if (isAnySelected) {
+                        className += " region-faded";
+                      }
+                    }
+                    
+                    if ((mode === 'REVERSE' || mode === 'TRIVIA') && stateName === targetWilaya && !currentFact) {
+                      className += " target-highlight";
+                    }
+
+                    if (targetWilaya === "You Win!") {
+                      className = "state-path win-animation";
+                    }
+
+                    if (Object.keys(guessedWilayas).filter(k => guessedWilayas[k] === "correct").length === 58) {
+                      className += " win-flag";
+                    }
+
+                    return (
+                      <Geography
+                        key={geo.rsmKey}
+                        geography={geo}
+                        className={className}
+                        onClick={(evt) => handleMapClickFinal(geo, evt)}
+                        style={{
+                          default: { outline: "none" },
+                          hover: { outline: "none" },
+                          pressed: { outline: "none" },
+                        }}
+                      />
+                    );
+                  })}
+                  {geographies.map((geo) => {
+                    const centroid = geoCentroid(geo);
+                    const stateName = geo.properties.name;
+                    // Only render labels for highlighted states in REGIONS mode
+                    if (mode === 'REGIONS' && guessedWilayas[stateName] === "correct") {
+                      return (
+                        <Marker key={`${geo.rsmKey}-marker`} coordinates={centroid} style={{ pointerEvents: "none" }}>
+                          <text y="2" fontSize={11} textAnchor="middle" fill="#fff" style={{ fontWeight: 'bold', textShadow: '1px 1px 3px #000, -1px -1px 3px #000' }}>
+                            {getWilayaDisplayName(stateName)}
+                          </text>
+                        </Marker>
+                      );
+                    }
+                    return null;
+                  })}
+                </>
+              )}
+            </Geographies>
+          </ZoomableGroup>
+        </ComposableMap>
+
+        {floatingTexts.map(ft => (
+          <div key={ft.id} className="floating-text" style={{ left: ft.x, top: ft.y }}>
+            {ft.text}
+            {ft.combo && <span className="floating-combo">Combo x{ft.combo}! 🔥</span>}
+          </div>
+        ))}
+      </div>
+
+      {!gameOver && !currentFact && (mode === 'REVERSE' || mode === 'TRIVIA') && (
+        <div className="options-grid">
+          {options.map((opt, i) => (
+            <button key={i} className="option-btn" onClick={() => handleGuess(opt)}>
+              {mode === 'REVERSE' ? getWilayaDisplayName(opt) : opt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {currentFact && (
+        <div className="overlay">
+          <div className="glass-panel modal">
+            <h2 className="title" style={{ fontSize: '2.5rem' }}>{t.awesome}</h2>
+            <div style={{ color: '#22c55e', fontSize: '1.2rem', fontWeight: 'bold' }}>
+              {currentFact.pointsEarned > 0 ? `+${currentFact.pointsEarned} ${t.points}` : t.factUnlocked}
+            </div>
+            <div className="fact-box">
+              <div className="fact-title">
+                {t.didYouKnow} {getWilayaDisplayName(currentFact.state)}?
+              </div>
+              <div className="fact-text">
+                {lang === 'ar' && WILAYA_DATA[currentFact.state]?.fact_ar ? WILAYA_DATA[currentFact.state].fact_ar : currentFact.text}
+              </div>
+            </div>
+            <button className="btn-primary" onClick={closeFactAndNext}>
+              {t.nextWilaya}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {studyData && (
+        <div className={mode === 'REGIONS' ? 'transparent-overlay' : 'overlay'} style={mode === 'REGIONS' ? { pointerEvents: 'none' } : { alignItems: 'flex-start', paddingTop: '5vh' }}>
+          <div className="glass-panel modal" style={mode === 'REGIONS' ? { position: 'absolute', bottom: '2rem', right: '2rem', width: '380px', maxWidth: '90vw', animation: 'floatUp 0.3s ease-out', pointerEvents: 'auto', padding: '1.5rem' } : { maxWidth: '700px', animation: 'floatUp 0.3s ease-out', pointerEvents: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 className="title" style={{ fontSize: mode === 'REGIONS' ? '1.8rem' : '2.5rem', margin: 0 }}>
+                {getWilayaDisplayName(studyData.stateName)}
+              </h2>
+              <button onClick={() => {
+                setStudyData(null);
+                if (mode === 'REGIONS') {
+                  setGuessedWilayas({});
+                  setMapView(DEFAULT_VIEW);
+                }
+              }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '2rem', cursor: 'pointer' }}>✖</button>
+            </div>
+            
+            {studyData.loading ? (
+              <div style={{ padding: '3rem', color: '#94a3b8' }}>Fetching official Wikipedia records... 📚</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'left' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                  {studyData.thumbnail && (
+                    <img src={studyData.thumbnail} alt={studyData.stateName} style={{ width: '150px', borderRadius: '8px', border: '2px solid rgba(255,255,255,0.2)' }} />
+                  )}
+                  {WILAYA_DATA[studyData.stateName] && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div className="stat-label">{t.capital} <span className="stat-value" style={{ fontSize: '1.2rem' }}>{lang === 'ar' ? WILAYA_DATA[studyData.stateName].name_ar : WILAYA_DATA[studyData.stateName].capital}</span></div>
+                      <div className="stat-label">{t.region} <span className="stat-value" style={{ fontSize: '1.2rem' }}>{t.regions[WILAYA_DATA[studyData.stateName].region] || WILAYA_DATA[studyData.stateName].region}</span></div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="fact-box" style={{ fontSize: mode === 'REGIONS' ? '0.9rem' : '1.1rem', lineHeight: mode === 'REGIONS' ? '1.4' : '1.6', maxHeight: '30vh', overflowY: 'auto' }}>
+                  {studyData.extract}
+                </div>
+                
+                {studyData.url && (
+                  <a href={studyData.url} target="_blank" rel="noreferrer" className="btn-primary" style={{ textDecoration: 'none', textAlign: 'center', background: '#3b82f6', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.2rem' }}>📖</span> {t.readMoreWiki}
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {gameOver && (
+        <div className="overlay">
+          <div className="glass-panel modal">
+            <div className="mascot">{(mode === 'TIME_ATTACK' ? timeLeft <= 0 : lives <= 0) ? "😢" : "🏆"}</div>
+            <h2 className="title" style={{ fontSize: '3.5rem' }}>
+              {(mode === 'TIME_ATTACK' ? timeLeft <= 0 : lives <= 0) ? "Game Over" : "You Win!"}
+            </h2>
+            <div className="stat-box" style={{ margin: '1rem 0' }}>
+              <span className="stat-label">{t.finalScore}</span>
+              <span className="stat-value" style={{ fontSize: '3rem' }}>⭐ {score}</span>
+            </div>
+            
+            {leaderboard.length > 0 && (
+              <div style={{ margin: '1rem 0', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', width: '100%' }}>
+                <h3 style={{ color: '#facc15', marginBottom: '0.5rem' }}>🌍 {t.topPlayers}</h3>
+                {leaderboard.slice(0,3).map((entry, i) => (
+                  <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '0.2rem 0' }}>
+                    <span>{i + 1}. {entry.name}</span>
+                    <span style={{ fontWeight: 'bold' }}>{entry.score} {t.pts}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button className="btn-primary" onClick={() => setGameStarted(false)}>
+              Back to Menu ↩️
+            </button>
+          </div>
+        </div>
+      )}
+      </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
