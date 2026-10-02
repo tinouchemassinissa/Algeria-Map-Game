@@ -14,7 +14,56 @@
   --state-correct: #22c55e;
   --state-incorrect: #ef4444;
   --state-target: #3b82f6;
+  --body-grad: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 70%);
 }
+
+body[data-theme='light'] {
+  --bg-color: #f0fdf4;
+  --panel-bg: rgba(255, 255, 255, 0.85);
+  --border-color: rgba(0, 0, 0, 0.1);
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --state-default: #cbd5e1;
+  --body-grad: radial-gradient(circle at 50% 0%, #e2e8f0 0%, #f1f5f9 70%);
+}
+
+@keyframes screenShake {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -2px) rotate(-1deg); }
+  20% { transform: translate(-3px, 0px) rotate(1deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 2px) rotate(-1deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  70% { transform: translate(3px, 1px) rotate(-1deg); }
+  80% { transform: translate(-1px, -1px) rotate(1deg); }
+  90% { transform: translate(1px, 2px) rotate(0deg); }
+  100% { transform: translate(1px, -2px) rotate(-1deg); }
+}
+
+.combo-shake {
+  animation: screenShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+.map-glow {
+  filter: drop-shadow(0 0 15px var(--accent-glow));
+  transition: filter 0.3s ease;
+}
+
+/* Region colors */
+.region-South { --state-default: #b45309; }
+.region-North { --state-default: #0369a1; }
+.region-East { --state-default: #4c1d95; }
+.region-West { --state-default: #15803d; }
+.region-Central { --state-default: #b91c1c; }
+.region-Highlands { --state-default: #4d7c0f; }
+
+body[data-theme='light'] .region-South { --state-default: #fde68a; }
+body[data-theme='light'] .region-North { --state-default: #bae6fd; }
+body[data-theme='light'] .region-East { --state-default: #ddd6fe; }
+body[data-theme='light'] .region-West { --state-default: #bbf7d0; }
+body[data-theme='light'] .region-Central { --state-default: #fecaca; }
+body[data-theme='light'] .region-Highlands { --state-default: #d9f99d; }
 
 * {
   box-sizing: border-box;
@@ -30,7 +79,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 70%);
+  background: var(--body-grad);
 }
 
 .game-container {

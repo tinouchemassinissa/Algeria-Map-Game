@@ -40,6 +40,8 @@ const BADGES = [
 function App() {
   const [playerName, setPlayerName] = useState("");
   const [gameStarted, setGameStarted] = useState(false);
+  const [shake, setShake] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [showAbout, setShowAbout] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -87,6 +89,14 @@ function App() {
       console.log("Firebase not configured yet");
     }
   };
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.removeAttribute('data-theme');
+    } else {
+      document.body.setAttribute('data-theme', 'light');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     // If the event fired before React loaded, it's saved here
@@ -407,7 +417,12 @@ function App() {
       const points = 10 * newStreak;
       const newScore = score + points;
       setScore(newScore);
-      if (mode === 'TIME_ATTACK') setTimeLeft(prev => prev + 2);
+      if (mode === 'TIME_ATTACK') setTimeLeft(prev => prev + 2 + Math.floor(newStreak / 3));
+      
+      if (newStreak >= 3) {
+        setShake(true);
+        setTimeout(() => setShake(false), 400);
+      }
       
       // Floating Combo Text
       if (evt && evt.clientX) {
@@ -481,7 +496,7 @@ function App() {
   };
 
   return (
-    <div className="game-wrapper" style={{ width: '100vw', height: '100vh' }}>
+    <div className={`game-wrapper ${shake ? 'combo-shake' : ''}`} style={{ width: '100vw', height: '100vh' }}>
       {/* Hidden Audio Elements for better browser support - ALWAYS MOUNTED */}
       <audio id="anthem-audio" src="/anthem.mp3" preload="auto"></audio>
       <audio id="bg-music" src="/music.mp3" loop preload="auto"></audio>
@@ -490,6 +505,9 @@ function App() {
         <div className="game-container" style={{ justifyContent: 'center' }}>
           <button className="icon-btn about-btn" onClick={() => setShowAbout(true)} title="About Algeria Wilaya Explorer" style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 100 }}>
             ℹ️
+          </button>
+          <button className="icon-btn" onClick={() => setIsDarkMode(!isDarkMode)} title="Toggle Theme" style={{ position: 'absolute', top: '20px', left: '70px', zIndex: 100 }}>
+            {isDarkMode ? "☀️" : "🌙"}
           </button>
           <button className="icon-btn music-toggle" onClick={toggleMusic} title="Toggle Music">
             {musicPlaying ? "🔊" : "🔇"}
@@ -659,7 +677,7 @@ function App() {
           <ZoomableGroup className="rsm-zoomable-group" zoom={mapView.zoom} center={mapView.center}>
             <Geographies geography={geoUrl}>
               {({ geographies }) => (
-                <>
+                <g className={shake ? "map-glow" : ""}>
                   {geographies.map((geo) => {
                     const stateName = geo.properties.name;
                     const status = guessedWilayas[stateName];
@@ -668,20 +686,20 @@ function App() {
                     if (status === "correct" && mode !== 'REGIONS') className += " correct";
                     if (status === "incorrect") className += " incorrect";
                     
-                    if (mode === 'REGIONS' && WILAYA_DATA[stateName]) {
+                    if (WILAYA_DATA[stateName]) {
                       const region = WILAYA_DATA[stateName].region;
-                      if (region === 'West') className += " region-west";
-                      if (region === 'East') className += " region-east";
-                      if (region === 'North') className += " region-north";
-                      if (region === 'South') className += " region-south";
-                      if (region === 'Central') className += " region-central";
+                      if (!status || mode === 'REGIONS') {
+                         className += ` region-${region}`;
+                      }
                       
-                      // Highlight effect when a region is actively selected
-                      const isAnySelected = Object.keys(guessedWilayas).length > 0;
-                      if (status === "correct") {
-                        className += " active-region";
-                      } else if (isAnySelected) {
-                        className += " region-faded";
+                      if (mode === 'REGIONS') {
+                        // Highlight effect when a region is actively selected
+                        const isAnySelected = Object.keys(guessedWilayas).length > 0;
+                        if (status === "correct") {
+                          className += " active-region";
+                        } else if (isAnySelected) {
+                          className += " region-faded";
+                        }
                       }
                     }
                     
@@ -726,7 +744,7 @@ function App() {
                     }
                     return null;
                   })}
-                </>
+                </g>
               )}
             </Geographies>
           </ZoomableGroup>

@@ -11,6 +11,7 @@ export default defineConfig({
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: false,
       workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,json,mp3}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/flagcdn\.com\/.*/i,
