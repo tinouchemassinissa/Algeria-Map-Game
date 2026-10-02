@@ -349,7 +349,7 @@ function App() {
         
         setStudyData({
            stateName,
-           extract: WILAYA_DATA[stateName].fact,
+           extract: lang === 'ar' && WILAYA_DATA[stateName]?.fact_ar ? WILAYA_DATA[stateName].fact_ar : lang === 'fr' && WILAYA_DATA[stateName]?.fact_fr ? WILAYA_DATA[stateName].fact_fr : WILAYA_DATA[stateName].fact,
            thumbnail: null,
            url: `https://en.wikipedia.org/wiki/${stateName.replace(/ /g, '_')}_Province`
         });
@@ -374,9 +374,16 @@ function App() {
           setMapView(REGION_VIEWS[region]);
         }
         
+        const regionLabelAr = "الولايات في هذه المنطقة:";
+        const regionLabelFr = "Wilayas dans cette région :";
+        const regionLabelEn = "Wilayas in this region:";
+        const extractText = lang === 'ar' ? `${regionLabelAr} ${regionStates.map(w => WILAYA_DATA[w]?.name_ar || w).join('، ')}` :
+                            lang === 'fr' ? `${regionLabelFr} ${regionStates.join(', ')}` :
+                            `${regionLabelEn} ${regionStates.join(', ')}`;
+        
         setStudyData({
           stateName: `${region} Region`,
-          extract: `Wilayas in this region: ${regionStates.join(', ')}`,
+          extract: extractText,
           thumbnail: null,
           url: `https://en.wikipedia.org/wiki/Geography_of_Algeria`
         });
@@ -423,7 +430,7 @@ function App() {
 
       setCurrentFact({
         state: stateName,
-        text: WILAYA_DATA[stateName].fact,
+        text: lang === 'ar' && WILAYA_DATA[stateName]?.fact_ar ? WILAYA_DATA[stateName].fact_ar : lang === 'fr' && WILAYA_DATA[stateName]?.fact_fr ? WILAYA_DATA[stateName].fact_fr : WILAYA_DATA[stateName].fact,
         pointsEarned: points
       });
 
@@ -760,7 +767,7 @@ function App() {
                 {t.didYouKnow} {getWilayaDisplayName(currentFact.state)}?
               </div>
               <div className="fact-text">
-                {lang === 'ar' && WILAYA_DATA[currentFact.state]?.fact_ar ? WILAYA_DATA[currentFact.state].fact_ar : currentFact.text}
+                {lang === 'ar' && WILAYA_DATA[currentFact.state]?.fact_ar ? WILAYA_DATA[currentFact.state].fact_ar : lang === 'fr' && WILAYA_DATA[currentFact.state]?.fact_fr ? WILAYA_DATA[currentFact.state].fact_fr : currentFact.text}
               </div>
             </div>
             <button className="btn-primary" onClick={closeFactAndNext}>
@@ -803,7 +810,7 @@ function App() {
                 </div>
                 
                 <div className="fact-box" style={{ fontSize: mode === 'REGIONS' ? '0.9rem' : '1.1rem', lineHeight: mode === 'REGIONS' ? '1.4' : '1.6', maxHeight: '30vh', overflowY: 'auto' }}>
-                  {studyData.extract}
+                  {mode !== 'REGIONS' && WILAYA_DATA[studyData.stateName] ? (lang === 'ar' && WILAYA_DATA[studyData.stateName]?.fact_ar ? WILAYA_DATA[studyData.stateName].fact_ar : lang === 'fr' && WILAYA_DATA[studyData.stateName]?.fact_fr ? WILAYA_DATA[studyData.stateName].fact_fr : studyData.extract) : studyData.extract}
                 </div>
                 
                 {studyData.url && (
