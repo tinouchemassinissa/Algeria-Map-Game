@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker } from 'react-simple-maps';
 import { geoCentroid, geoMercator } from 'd3-geo';
 import confetti from 'canvas-confetti';
-import { WILAYA_DATA } from './data';
-import { playCorrectSound, playIncorrectSound } from './audio';
-import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from './firebase';
+import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { playCorrectSound, playIncorrectSound, playComboSound, playWinSound } from './audio';
+import { WILAYA_DATA } from './data';
 import { TRANSLATIONS } from './translations';
 import './index.css';
 
@@ -42,6 +42,7 @@ function App() {
   const [gameStarted, setGameStarted] = useState(false);
   const [shake, setShake] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [showLabels, setShowLabels] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -267,6 +268,7 @@ function App() {
     const remaining = WILAYA_NAMES.filter(s => currentGuessed[s] !== "correct");
     if (remaining.length === 0) {
       setTargetWilaya("You Win!");
+      playWinSound();
       
       const anthemMusic = document.getElementById('anthem-audio');
       const bgMusic = document.getElementById('bg-music');
@@ -421,6 +423,7 @@ function App() {
       
       if (newStreak >= 3) {
         setShake(true);
+        playComboSound(newStreak);
         setTimeout(() => setShake(false), 400);
       }
       
@@ -618,6 +621,11 @@ function App() {
         <button className="icon-btn music-toggle" onClick={toggleMusic} title="Toggle Music">
           {musicPlaying ? "🔊" : "🔇"}
         </button>
+        {mode === 'STUDY' && (
+          <button className="icon-btn" onClick={() => setShowLabels(!showLabels)} title="Toggle Labels" style={{ position: 'absolute', top: '20px', left: '120px', zIndex: 100 }}>
+            🏷️
+          </button>
+        )}
         <div style={{ position: 'absolute', top: '20px', right: '70px', display: 'flex', gap: '5px', zIndex: 100 }}>
             <button className={`lang-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>EN</button>
             <button className={`lang-btn ${lang === 'fr' ? 'active' : ''}`} onClick={() => setLang('fr')}>FR</button>
@@ -732,8 +740,10 @@ function App() {
                   {geographies.map((geo) => {
                     const centroid = geoCentroid(geo);
                     const stateName = geo.properties.name;
-                    // Only render labels for highlighted states in REGIONS mode
-                    if (mode === 'REGIONS' && guessedWilayas[stateName] === "correct") {
+                    // Render labels for highlighted states in REGIONS mode, or in STUDY mode if toggled
+                    const shouldShowLabel = (mode === 'REGIONS' && guessedWilayas[stateName] === "correct") || (mode === 'STUDY' && showLabels);
+                    
+                    if (shouldShowLabel) {
                       return (
                         <Marker key={`${geo.rsmKey}-marker`} coordinates={centroid} style={{ pointerEvents: "none" }}>
                           <text y="2" fontSize={11} textAnchor="middle" fill="#fff" style={{ fontWeight: 'bold', textShadow: '1px 1px 3px #000, -1px -1px 3px #000' }}>
