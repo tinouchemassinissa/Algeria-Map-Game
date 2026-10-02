@@ -7,7 +7,6 @@ export const TRANSLATIONS = {
       CLASSIC: "Classic Mode",
       TIME_ATTACK: "Time Attack",
       REVERSE: "Reverse Mode",
-      CAPITALS: "Capitals Mode",
       TRIVIA: "Trivia Challenge",
       STUDY: "Study Guide",
       REGIONS: "Region Explorer"
@@ -16,7 +15,6 @@ export const TRANSLATIONS = {
       CLASSIC: "Find the wilaya on the map when prompted.",
       TIME_ATTACK: "Race against the clock to find as many as you can!",
       REVERSE: "We highlight the wilaya, you guess the name.",
-      CAPITALS: "Locate the wilaya by its capital city.",
       TRIVIA: "Test your deep knowledge of Algerian wilayas.",
       STUDY: "Click around the map to learn facts and capitals.",
       REGIONS: "Explore the different geographic regions."
@@ -28,7 +26,6 @@ export const TRANSLATIONS = {
     gameOver: "Game Over",
     playAgain: "Play Again",
     prompts: {
-      capitals: "Find the wilaya where the capital is:",
       reverse: "What wilaya is highlighted on the map?",
       study: "Study Guide Mode Active",
       default: "Can you find...",
@@ -73,7 +70,6 @@ export const TRANSLATIONS = {
       CLASSIC: "Mode Classique",
       TIME_ATTACK: "Contre la Montre",
       REVERSE: "Mode Inversé",
-      CAPITALS: "Capitales",
       TRIVIA: "Défi Trivia",
       STUDY: "Guide d'Étude",
       REGIONS: "Explorateur de Régions"
@@ -82,7 +78,6 @@ export const TRANSLATIONS = {
       CLASSIC: "Trouvez la wilaya sur la carte.",
       TIME_ATTACK: "Faites la course contre la montre !",
       REVERSE: "Nous surlignons, vous devinez le nom.",
-      CAPITALS: "Localisez la wilaya par sa capitale.",
       TRIVIA: "Testez vos connaissances sur les wilayas.",
       STUDY: "Cliquez sur la carte pour apprendre.",
       REGIONS: "Explorez les différentes régions géographiques."
@@ -94,7 +89,6 @@ export const TRANSLATIONS = {
     gameOver: "Fin de la partie",
     playAgain: "Rejouer",
     prompts: {
-      capitals: "Trouvez la wilaya dont la capitale est :",
       reverse: "Quelle wilaya est en surbrillance ?",
       study: "Mode Guide d'Étude Actif",
       default: "Pouvez-vous trouver...",
@@ -139,7 +133,6 @@ export const TRANSLATIONS = {
       CLASSIC: "الوضع الكلاسيكي",
       TIME_ATTACK: "تحدي الوقت",
       REVERSE: "الوضع العكسي",
-      CAPITALS: "عواصم الولايات",
       TRIVIA: "تحدي المعلومات",
       STUDY: "دليل الدراسة",
       REGIONS: "مستكشف المناطق"
@@ -148,7 +141,6 @@ export const TRANSLATIONS = {
       CLASSIC: "ابحث عن الولاية على الخريطة.",
       TIME_ATTACK: "سابق الزمن لإيجاد أكبر عدد ممكن!",
       REVERSE: "نحن نحدد الولاية، وأنت تخمن الاسم.",
-      CAPITALS: "حدد الولاية من خلال عاصمتها.",
       TRIVIA: "اختبر معرفتك العميقة بولايات الجزائر.",
       STUDY: "انقر على الخريطة لتعلم الحقائق والعواصم.",
       REGIONS: "استكشف المناطق الجغرافية المختلفة."
@@ -160,7 +152,6 @@ export const TRANSLATIONS = {
     gameOver: "انتهت اللعبة",
     playAgain: "العب مرة أخرى",
     prompts: {
-      capitals: "ابحث عن الولاية التي عاصمتها:",
       reverse: "ما هي الولاية المحددة على الخريطة؟",
       study: "وضع دليل الدراسة نشط",
       default: "هل يمكنك العثور على...",

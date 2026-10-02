@@ -25,7 +25,6 @@ const GAME_MODES = {
   CLASSIC: { id: 'CLASSIC', title: 'Classic', desc: 'Find the wilaya on the map.' },
   TIME_ATTACK: { id: 'TIME_ATTACK', title: 'Time Attack', desc: '60 seconds. Go fast!' },
   REVERSE: { id: 'REVERSE', title: 'Reverse', desc: 'Map highlights a wilaya. Pick its name.' },
-  CAPITALS: { id: 'CAPITALS', title: 'Capitals', desc: 'Find the wilaya by its Capital.' },
   TRIVIA: { id: 'TRIVIA', title: 'Trivia', desc: 'Wilaya is highlighted. Answer a fact!' },
   STUDY: { id: 'STUDY', title: 'Study Guide', desc: 'Relax, click around, and learn! 📚' },
   REGIONS: { id: 'REGIONS', title: 'Region Explorer', desc: 'Click to learn about Algeria regions! 🧭' }
@@ -35,7 +34,6 @@ const BADGES = [
   { id: 'classic', icon: '🗺️', label: 'Classic Explorer (Score 200+)' },
   { id: 'speedster', icon: '⏱️', label: 'Speedster (Time Attack 200+)' },
   { id: 'geographer', icon: '📍', label: 'Geographer (Reverse 200+)' },
-  { id: 'president', icon: '🏛️', label: 'President (Capitals 200+)' },
   { id: 'brainiac', icon: '🧠', label: 'Brainiac (Trivia 200+)' }
 ];
 
@@ -162,7 +160,6 @@ function App() {
       if (currentMode === 'CLASSIC') badgeId = 'classic';
       if (currentMode === 'TIME_ATTACK') badgeId = 'speedster';
       if (currentMode === 'REVERSE') badgeId = 'geographer';
-      if (currentMode === 'CAPITALS') badgeId = 'president';
       if (currentMode === 'TRIVIA') badgeId = 'brainiac';
       
       if (badgeId && !unlockedBadges.includes(badgeId)) {
@@ -636,8 +633,7 @@ function App() {
         {!gameOver && !currentFact && (
           <div className="target-state-display">
             <span className="target-label">
-              {mode === 'CAPITALS' ? t.prompts.capitals : 
-               mode === 'REVERSE' ? t.prompts.reverse :
+              {mode === 'REVERSE' ? t.prompts.reverse :
                mode === 'TRIVIA' ? (triviaQuestion === 'capital' ? t.prompts.triviaCapital : t.prompts.triviaRegion) :
                mode === 'STUDY' ? t.prompts.study :
                t.prompts.default}
@@ -645,8 +641,7 @@ function App() {
             <div className="target-name" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               {/* No flags for wilayas */}
               <span className={targetWilaya === "Game Over" ? "game-over-text" : targetWilaya === "You Win!" ? "win-text" : "target-wilaya"}>
-                {mode === 'CAPITALS' ? (lang === 'ar' ? WILAYA_DATA[targetWilaya]?.name_ar : WILAYA_DATA[targetWilaya]?.capital) : 
-                 mode === 'REVERSE' || mode === 'TRIVIA' ? "???" : 
+                {mode === 'REVERSE' || mode === 'TRIVIA' ? "???" : 
                  targetWilaya === "Game Over" || targetWilaya === "You Win!" ? targetWilaya : getWilayaDisplayName(targetWilaya)}
               </span>
             </div>
