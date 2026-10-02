@@ -50,8 +50,8 @@ If you want to run this project on your own machine, contribute, or modify the m
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/tinouchemassinissa/Algeria-Map-Game.git
-   cd Algeria-Map-Game
+   git clone https://github.com/tinouchemassinissa/dzmap.git
+   cd dzmap
    ```
 
 2. **Install dependencies:**
@@ -76,7 +76,7 @@ If you want to run this project on your own machine, contribute, or modify the m
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/tinouchemassinissa/Algeria-Map-Game/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/tinouchemassinissa/dzmap/issues).
 
 ## 👨‍💻 Author
 
