@@ -746,7 +746,7 @@ function App() {
                     if (shouldShowLabel) {
                       return (
                         <Marker key={`${geo.rsmKey}-marker`} coordinates={centroid} style={{ pointerEvents: "none" }}>
-                          <text y="2" fontSize={11} textAnchor="middle" fill="#fff" style={{ fontWeight: 'bold', textShadow: '1px 1px 3px #000, -1px -1px 3px #000' }}>
+                          <text y="2" fontSize={4} textAnchor="middle" fill="#fff" style={{ fontWeight: 'bold', textShadow: '0.5px 0.5px 1px #000, -0.5px -0.5px 1px #000' }}>
                             {getWilayaDisplayName(stateName)}
                           </text>
                         </Marker>
