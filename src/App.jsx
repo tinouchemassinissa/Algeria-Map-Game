@@ -500,10 +500,7 @@ function App() {
 
   return (
     <div className={`game-wrapper ${shake ? 'combo-shake' : ''}`} style={{ width: '100vw', height: '100vh' }}>
-      {/* Hidden Audio Elements for better browser support - ALWAYS MOUNTED */}
-      <audio id="anthem-audio" src="/dz_anthem_v2.mp3" preload="auto"></audio>
-      <audio id="bg-music" src="/bg_music_v2.mp3" loop preload="auto"></audio>
-
+      {/* Removed Audio Elements from here since they exist in index.html */}
       {!gameStarted ? (
         <div className="game-container" style={{ justifyContent: 'center' }}>
           <button className="icon-btn about-btn" onClick={() => setShowAbout(true)} title="About Algeria Wilaya Explorer" style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 100 }}>
