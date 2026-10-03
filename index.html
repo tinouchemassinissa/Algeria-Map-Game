@@ -14,6 +14,19 @@
         e.preventDefault();
         window.globalInstallPrompt = e;
       });
+      // Force kill the stubborn PWA cache that holds Yankee Doodle
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister().then(function(boolean) {
+              if (boolean) {
+                console.log('Successfully unregistered old service worker!');
+                window.location.reload();
+              }
+            });
+          }
+        });
+      }
     </script>
   </head>
   <body>
